@@ -5,7 +5,7 @@ RUN apt install pkg-config libasound2-dev curl build-essential -y
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 
-RUN curl -L https://github.com/badaix/snapcast/releases/download/v0.26.0/snapserver_0.26.0-1_amd64.deb -o /snapserver.deb
+RUN curl -L https://github.com/badaix/snapcast/releases/download/v0.27.0/snapserver_0.27.0-1_amd64.deb -o /snapserver.deb
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
