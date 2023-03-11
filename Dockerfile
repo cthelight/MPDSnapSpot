@@ -5,7 +5,6 @@ RUN apt install pkg-config libasound2-dev curl build-essential libpulse-dev libv
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 
-# RUN curl -L https://github.com/badaix/snapcast/releases/download/v0.27.0/snapserver_0.27.0-1_amd64.deb -o /snapserver.deb
 ENV PATH="/root/.cargo/bin:${PATH}"
 
 RUN cargo install --root /usr librespot
@@ -35,6 +34,7 @@ COPY start.sh start.sh
 
 # Location for user to mount mpd.conf and snapserver.conf, and location for MPD data
 RUN mkdir /config /data
-
+# Snapserver stores persistent data in .config. Override that to go to /data
+RUN ln -s /data /root/.config
 # Start the services via shell script
 CMD ./start.sh
