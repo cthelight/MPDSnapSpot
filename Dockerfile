@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim AS builder
 
 RUN apt update
-RUN apt install pkg-config libasound2-dev curl build-essential libpulse-dev libvorbisidec-dev libvorbis-dev libopus-dev libflac-dev libsoxr-dev alsa-utils libavahi-client-dev avahi-daemon libexpat1-dev libboost-dev git -y
+RUN apt install pkg-config libasound2-dev curl build-essential libpulse-dev libvorbisidec-dev libvorbis-dev libopus-dev libflac-dev libsoxr-dev alsa-utils libavahi-client-dev avahi-daemon libexpat1-dev libboost-dev git npm -y
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 
@@ -15,6 +15,15 @@ RUN git checkout v0.27.0
 RUN make -j $(nproc --all)
 RUN cp server/snapserver /snapserver
 
+# Also build snapweb
+WORKDIR /
+RUN git clone https://github.com/badaix/snapweb.git
+WORKDIR /snapweb
+RUN git checkout v0.6.0-beta.2
+RUN npm ci && npm run build
+RUN cp -r build /snapweb_out
+
+
 
 
 
@@ -23,6 +32,9 @@ FROM debian:bookworm-slim
 # Steal relevant binaries from builder
 COPY --from=builder /snapserver /usr/bin/snapserver
 COPY --from=builder /usr/bin/librespot /usr/bin/librespot
+
+# Steal snapweb website contents from builder (snapserver.conf needs to point here)
+COPY --from=builder /snapweb_out /usr/share/snapserver/snapweb
 
 # Install necessary SW
 

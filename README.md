@@ -13,9 +13,11 @@ To use this container you should do the following:
  - Mount a directory in the container containing your music for MPD to utilize
     - Also no specific mount point required here, as this is also configured in the MPD config file
 
+NOTE: The contents of the `snapweb` browser-based configuration/status tool are located at the default `/usr/share/snapserver/snapweb`. To make this available, ensure port 1780 is exposed, and your http doc_root in your `snapserver.conf` is pointing at that location.
 
 Huge shoutout to the following projects to make this possible:
  - https://github.com/badaix/snapcast
+ - https://github.com/badaix/snapweb
  - https://www.musicpd.org/
  - https://github.com/librespot-org/librespot
 
