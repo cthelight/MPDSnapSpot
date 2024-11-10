@@ -11,7 +11,7 @@ RUN cargo install --root /usr librespot
 WORKDIR /
 RUN git clone https://github.com/badaix/snapcast.git
 WORKDIR /snapcast
-RUN git checkout v0.28.0
+RUN git checkout v0.29.0
 RUN mkdir build
 WORKDIR /snapcast/build
 RUN cmake .. -DBUILD_CLIENT=OFF
@@ -22,7 +22,7 @@ RUN cp ../bin/snapserver /snapserver
 WORKDIR /
 RUN git clone https://github.com/badaix/snapweb.git
 WORKDIR /snapweb
-RUN git checkout v0.7.0
+RUN git checkout v0.8.0
 RUN npm ci && npm run build
 RUN cp -r dist /snapweb_out
 

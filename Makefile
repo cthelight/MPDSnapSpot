@@ -16,4 +16,4 @@ multiarch_build_tag:
 multiarch_build_tag_push:
 	@echo -n "Are you sure (Tagging as ${IMAGE_NAME})? [y/N] " && read ans && if ! [ $${ans:-'N'} = 'y' ]; then 1>&2 echo "Aborting..."; exit 1; fi
 	@if [ -z ${TAG} ]; then 1>&2 echo "TAG variable not set. Aborting..."; exit 1; fi 
-	docker buildx build --platform linux/arm/v7,linux/arm64/v8,linux/amd64 --tag ${IMAGE_NAME} --push .
+	docker buildx build --platform linux/amd64 --tag ${IMAGE_NAME} --push .
