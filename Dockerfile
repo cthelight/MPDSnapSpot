@@ -11,7 +11,7 @@ RUN cargo install --root /usr librespot
 WORKDIR /
 RUN git clone https://github.com/badaix/snapcast.git
 WORKDIR /snapcast
-RUN git checkout v0.29.0
+RUN git checkout v0.31.0
 RUN mkdir build
 WORKDIR /snapcast/build
 RUN cmake .. -DBUILD_CLIENT=OFF
