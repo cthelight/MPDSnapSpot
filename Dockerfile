@@ -7,7 +7,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | bash -s -- -y
 
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-RUN cargo install --root /usr librespot
+RUN cargo install --root /usr --locked librespot
 WORKDIR /
 RUN git clone https://github.com/badaix/snapcast.git
 WORKDIR /snapcast
