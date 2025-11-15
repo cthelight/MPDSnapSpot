@@ -22,7 +22,7 @@ RUN cp ../bin/snapserver /snapserver
 WORKDIR /
 RUN git clone https://github.com/badaix/snapweb.git
 WORKDIR /snapweb
-RUN git checkout v0.8.0
+RUN git checkout v0.9.2
 RUN npm ci && npm run build
 RUN cp -r dist /snapweb_out
 
