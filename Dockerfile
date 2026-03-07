@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim AS builder
+FROM debian:trixie-slim AS builder
 
 RUN apt update
 RUN apt install pkg-config libasound2-dev curl build-essential libpulse-dev libvorbisidec-dev libvorbis-dev libopus-dev libflac-dev libsoxr-dev alsa-utils libavahi-client-dev avahi-daemon libexpat1-dev libboost-dev git npm cmake -y
@@ -30,7 +30,7 @@ RUN cp -r dist /snapweb_out
 
 
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 # Steal relevant binaries from builder
 COPY --from=builder /snapserver /usr/bin/snapserver
