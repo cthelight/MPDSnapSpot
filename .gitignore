@@ -1,0 +1,2 @@
+# Local Docker state (daemon config, images, build logs used for testing)
+.docker-home/

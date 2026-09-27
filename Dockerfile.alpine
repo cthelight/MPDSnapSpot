@@ -1,4 +1,18 @@
 # syntax=docker/dockerfile:1
+#
+# Alpine (musl) variant of the image.
+#
+# Why this exists: the Debian image's size is dominated by the mpd package's
+# dependency tree (~567 MB installed: full ffmpeg stack, libicu, ...). On
+# Alpine the same mpd (0.24.8 on alpine:3.23, newer than Debian trixie's
+# 0.24.4) resolves to a much tighter closure, so the final image is roughly
+# 2.9x smaller (933 MB -> 325 MB). The cost is that snapserver and
+# librespot are compiled for musl instead of glibc; every native
+# dependency of both is packaged on Alpine, so no exotic toolchains are
+# needed.
+#
+# The default image (Dockerfile) stays the battle-tested glibc build; use
+# `make build_alpine` for this variant.
 
 ARG SNAPCAST_VERSION=0.35.0
 ARG SNAPWEB_VERSION=0.9.3
@@ -8,23 +22,21 @@ ARG LIBRESPOT_VERSION=0.8.0
 ARG RUST_TOOLCHAIN=1.98.1
 
 # ---------------------------------------------------------------------------
-# Stage 1: build snapserver and librespot
+# Stage 1: build snapserver and librespot (musl)
 # ---------------------------------------------------------------------------
-FROM debian:trixie-slim AS builder
+FROM alpine:3.23 AS builder
 
 ARG SNAPCAST_VERSION
 ARG LIBRESPOT_VERSION
 ARG RUST_TOOLCHAIN
 
-# Build toolchain. Only what is actually needed to build snapserver and
-# librespot (no git, no npm, no client-only libs like pulse/tremor).
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl \
-        build-essential cmake pkg-config \
-        libasound2-dev libavahi-client-dev libexpat1-dev libflac-dev \
-        libogg-dev libopus-dev libsoxr-dev libssl-dev libvorbis-dev \
-        libboost-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Build toolchain. Only what snapserver and librespot actually need (no git,
+# no client-only libs like pulse/jack/pipewire).
+RUN apk add --no-cache \
+        ca-certificates curl bash \
+        build-base cmake pkgconf \
+        alsa-lib-dev avahi-dev expat-dev flac-dev libogg-dev opus-dev \
+        libvorbis-dev soxr-dev openssl-dev boost-dev zlib-dev zstd-dev
 
 # --- snapserver (release tarball, no client) ---
 RUN mkdir -p /src \
@@ -41,6 +53,7 @@ RUN cmake -B build -DBUILD_CLIENT=OFF \
 # --- librespot (pinned toolchain, locked dependency tree) ---
 # The rustup state lives in the cache mount so toolchain downloads are
 # reused across builds (and stay consistent with the cargo mounts below).
+# Building natively on Alpine, the host target is already musl.
 RUN --mount=type=cache,target=/root/.rustup \
     curl --proto '=https' --tlsv1.2 -sSf --retry 3 https://sh.rustup.rs \
     | bash -s -- -y --profile minimal --default-toolchain "${RUST_TOOLCHAIN}"
@@ -58,22 +71,24 @@ WORKDIR /src/librespot-${LIBRESPOT_VERSION}
 # The upstream rust-toolchain.toml requests rustfmt/clippy components (absent
 # from the minimal profile) and would fight the pinned toolchain; drop it.
 RUN rm -f rust-toolchain.toml
+# musl's Rust target links static-pie by default, which would require static
+# system libs (not shipped by Alpine's -dev packages); link dynamically
+# against the same runtime libs as the glibc build.
 RUN --mount=type=cache,target=/root/.cargo/registry \
     --mount=type=cache,target=/root/.cargo/git \
     --mount=type=cache,target=/root/.rustup \
+    RUSTFLAGS="-C target-feature=-crt-static" \
     cargo install --path . --locked --root /usr \
     && strip /usr/bin/librespot
 
 # ---------------------------------------------------------------------------
 # Stage 2: prebuilt snapweb (no Node.js build in this image)
 # ---------------------------------------------------------------------------
-FROM debian:trixie-slim AS snapweb
+FROM alpine:3.23 AS snapweb
 
 ARG SNAPWEB_VERSION
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates curl unzip \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates curl unzip
 RUN curl -fsSL --retry 3 -o /tmp/snapweb.zip \
         "https://github.com/badaix/snapweb/releases/download/v${SNAPWEB_VERSION}/snapweb.zip" \
     && mkdir -p /snapweb \
@@ -83,25 +98,27 @@ RUN curl -fsSL --retry 3 -o /tmp/snapweb.zip \
 # ---------------------------------------------------------------------------
 # Stage 3: runtime image
 # ---------------------------------------------------------------------------
-FROM debian:trixie-slim
+FROM alpine:3.23
 
-# Unprivileged user (uid/gid 125, matching Debian's mpd package). Both MPD
-# (which honours the `user "mpd"` config directive) and snapserver/librespot
-# run as this user; nothing runs as root.
-RUN groupadd --system --gid 125 mpd \
-    && useradd --system --uid 125 --gid mpd \
-        --home-dir /home/mpd --shell /usr/sbin/nologin mpd
+# Unprivileged user (uid/gid 125, matching the Debian build). Both MPD (which
+# honours the `user "mpd"` config directive) and snapserver/librespot run as
+# this user; nothing runs as root.
+RUN addgroup -S -g 125 mpd \
+    && adduser -S -u 125 -G mpd -h /home/mpd -s /sbin/nologin mpd
 
 # Runtime dependencies:
 #  - mpd: music player daemon (pulls in its own audio codecs)
 #  - tini: PID 1 that forwards termination signals and reaps zombies
-#  - the rest are the runtime libraries snapserver links against
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        tini mpd \
-        libasound2t64 libavahi-client3 libexpat1 libflac14 \
-        libogg0 libopus0 libsoxr0 libssl3t64 \
-        libstdc++6 libvorbis0a libvorbisenc2 \
-    && rm -rf /var/lib/apt/lists/*
+#  - bash: start.sh and the healthcheck are bash scripts (busybox ash lacks
+#    `wait -n` and /dev/tcp)
+#  - the rest are the runtime libraries snapserver/librespot link against
+RUN apk add --no-cache \
+        mpd tini bash \
+        alsa-lib avahi-libs expat flac libogg opus soxr libvorbis \
+        openssl libstdc++ \
+    # Alpine ships tini in /sbin; the Debian build's /usr/bin/tini path is
+    # kept so the ENTRYPOINT (and any exec'ing tooling) is identical.
+    && ln -s /sbin/tini /usr/bin/tini
 
 COPY --from=builder /usr/bin/snapserver /usr/bin/snapserver
 COPY --from=builder /usr/bin/librespot /usr/bin/librespot
@@ -114,10 +131,25 @@ COPY start.sh /start.sh
 # /data:   MPD state (db_file, playlists, ...) and snapserver persistent
 #          data (server.json) live here; snapserver finds it via the
 #          /home/mpd/.config -> /data symlink.
-RUN mkdir -p /config /data /home/mpd \
+RUN mkdir -p /config /data \
     && chown -R mpd:mpd /data /home/mpd \
     && ln -s /data /home/mpd/.config \
     && chmod 0755 /start.sh
+
+# Self-check: fail the build if either binary has an unresolved dynamic
+# dependency. `scanelf -n --use-ldpath` prints each NEEDED entry resolved to
+# a full path when it is present, and as a bare soname when it is not; a bare
+# soname (first char not "/" or a space) is therefore the failure condition.
+# (musl has no ld cache to fall back on.) scanelf is removed in the same
+# layer, so it costs nothing in the final image.
+RUN apk add --no-cache scanelf \
+    && if scanelf -n --use-ldpath -q /usr/bin/snapserver /usr/bin/librespot \
+           | tr ',' '\n' | grep -qE '^[^ /]'; then \
+           scanelf -n --use-ldpath -q /usr/bin/snapserver /usr/bin/librespot; \
+           echo "ERROR: unresolved libraries (bare names); extend the runtime apk set" >&2; \
+           exit 1; \
+       fi \
+    && apk del scanelf
 
 USER mpd
 # snapserver derives its persistent-data directory from $HOME

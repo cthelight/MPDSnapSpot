@@ -1,0 +1,7 @@
+.git
+.docker-home
+example_configs
+tools
+Makefile
+*.md
+*.log
